@@ -1,0 +1,89 @@
+﻿@page "/"
+@inject HttpClient Http
+@using BlazorSignalRScheduler.Shared
+@inject NavigationManager Navigation
+
+<div class="form-group">
+    <label>
+        User: <input @bind="userName" />
+    </label>
+</div>
+<hr>
+<SfSchedule TValue="AppointmentData" Height="600px" CurrentView="View.Week">
+    <ScheduleEvents TValue="AppointmentData" ActionCompleted="OnActionCompleted"></ScheduleEvents>
+    <ScheduleEventSettings DataSource="@DataSource"></ScheduleEventSettings>
+</SfSchedule>
+
+<hr>
+
+    @foreach (var message in messages)
+    {
+    <SfMessage Severity="MessageSeverity.Info">@message</SfMessage>
+    }
+
+@code {
+    HubConnection? connection;
+    private string? userName;
+    private List<string> messages = new List<string>();
+    public List<AppointmentData>? DataSource;
+
+    protected override async Task OnInitializedAsync()
+    {
+        DataSource = await Http.GetFromJsonAsync<List<AppointmentData>>("AppointmentData");
+        connection = new HubConnectionBuilder().WithUrl(Navigation.ToAbsoluteUri("/schedulerhub")).Build();
+        connection.On<string, List<AppointmentData>, List<AppointmentData>, List<AppointmentData>>("ReceiveData", OnDataChange);
+        await connection.StartAsync();
+    }
+
+    public void OnActionCompleted(ActionEventArgs<AppointmentData> args)
+    {
+        if (args.ActionType == ActionType.EventCreate || args.ActionType == ActionType.EventRemove || args.ActionType == ActionType.EventChange)
+        {
+            connection.InvokeAsync("SendData", userName, args.AddedRecords, args.ChangedRecords, args.DeletedRecords);
+        }
+    }
+
+    Task OnDataChange(string user, List<AppointmentData> addedData, List<AppointmentData> changedData, List<AppointmentData> deletedData)
+    {
+        string msg = "";
+        List<AppointmentData> appointmentData = DataSource.ToList();
+
+        if (addedData != null && addedData.Count > 0)
+        {
+            foreach (AppointmentData data in addedData)
+            {
+                appointmentData.Add(data);
+                msg = "added a new appointment with subject " + data.Subject;
+            }
+            
+        }
+        if (changedData != null && changedData.Count > 0)
+        {
+            foreach (AppointmentData data in changedData)
+            {
+                int index = appointmentData.FindIndex(m => m.Id == data.Id);
+                if (index >= 0)
+                {
+                    appointmentData[index] = data;
+                    msg = "edited an appointment with subject " + appointmentData[index].Subject;
+                }
+            }
+        }
+        if (deletedData != null && deletedData.Count > 0)
+        {
+            foreach (AppointmentData data in deletedData)
+            {
+                int index = appointmentData.FindIndex(m => m.Id == data.Id);
+                if (index >= 0)
+                {
+                    msg = "deleted an appointment with subject " + appointmentData[index].Subject;
+                    appointmentData.RemoveAt(index);
+                }
+            }
+        }
+        this.DataSource = appointmentData;
+        messages.Add($"{user} {msg}");
+        this.StateHasChanged();
+        return Task.CompletedTask;
+    }
+}
