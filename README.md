@@ -4,7 +4,6 @@ A quick-start Blazor WebAssembly application that is pre-configured with SignalR
 ![Blazor Scheduler with SignalR working](blazor-scheduler.gif)
 
 ## Prerequisites
-
 * Visual Studio 2022
 * .NET latest version installed in your system
 
